@@ -1,0 +1,34 @@
+name: dynamic_app_icon_switcher
+description: Switch Android and iOS launcher/home-screen icons at runtime with activity-alias and alternate icons.
+version: 0.1.0
+homepage: https://github.com/ahmedalam/dynamic_app_icon_switcher
+
+environment:
+  sdk: ^3.12.2
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  plugin_platform_interface: ^2.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.ahmedalam.dynamic_app_icon_switcher
+        pluginClass: DynamicAppIconSwitcherPlugin
+      ios:
+        pluginClass: DynamicAppIconSwitcherPlugin
+
+topics:
+  - dynamic-icon
+  - alternate-icon
+  - launcher-icon
+  - app-icon
+  - flutter-plugin
