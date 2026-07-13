@@ -1,0 +1,11 @@
+name: add_alternate_icon
+description: Generate Android/iOS alternate app icons and wire Manifest + Info.plist.
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  args: ^2.7.0
+  image: ^4.9.1
+  path: ^1.9.1

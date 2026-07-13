@@ -79,6 +79,16 @@
 		</dict>
 		<key>CFBundleAlternateIcons</key>
 		<dict>
+			<key>Promo</key>
+			<dict>
+				<key>CFBundleIconFiles</key>
+				<array>
+					<string>Promo</string>
+				</array>
+				<key>UIPrerenderedIcon</key>
+				<false/>
+			</dict>
+
 			<key>Red</key>
 			<dict>
 				<key>CFBundleIconFiles</key>
@@ -102,6 +112,15 @@
 				<key>CFBundleIconFiles</key>
 				<array>
 					<string>Green</string>
+				</array>
+				<key>UIPrerenderedIcon</key>
+				<false/>
+			</dict>
+			<key>WorldCup</key>
+			<dict>
+				<key>CFBundleIconFiles</key>
+				<array>
+					<string>WorldCup</string>
 				</array>
 				<key>UIPrerenderedIcon</key>
 				<false/>

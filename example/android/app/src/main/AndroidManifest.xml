@@ -63,6 +63,31 @@
             </intent-filter>
         </activity-alias>
 
+        <activity-alias
+            android:name=".icons.WorldCup"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_worldcup"
+            android:label="World Cup"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>        <activity-alias
+            android:name=".icons.Promo"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_promo"
+            android:label="Promo"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
+
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
