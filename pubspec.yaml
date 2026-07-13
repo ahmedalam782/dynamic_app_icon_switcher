@@ -1,7 +1,7 @@
 name: dynamic_app_icon_switcher
 description: Switch Android and iOS launcher/home-screen icons at runtime with activity-alias and alternate icons.
 version: 0.1.0
-homepage: https://github.com/ahmedalam/dynamic_app_icon_switcher
+homepage: https://github.com/ahmedalam782/dynamic_app_icon_switcher
 
 environment:
   sdk: ^3.12.2
