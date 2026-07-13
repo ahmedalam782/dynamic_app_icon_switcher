@@ -309,4 +309,4 @@ Demonstrates:
 
 ## License
 
-See [LICENSE](LICENSE).
+MIT License © 2026 Ahmed Alam — see [LICENSE](LICENSE).
