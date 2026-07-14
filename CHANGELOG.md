@@ -5,5 +5,6 @@
 * Public API: `supportsAlternateIcons`, `setIcon`, `currentIcon`,
   `getAvailableIcons`, picker helpers, and `applyActiveIconIfNeeded`.
 * HTTP API brand config models (`RemoteBrandConfig` / `RemoteAppIconConfig` /
-  `RemoteSplashConfig`) — control layer is your backend, not Firebase.
-* Example: auto-apply `active_icon` + cached splash sync via API.
+  `RemoteSplashConfig`) — control layer is your backend via **Dio**, not Firebase.
+* Example: Dio `BrandConfigApi`, auto-apply `active_icon`, cached splash sync,
+  and seasonal demo icons (`Ramadan`, `EidAdha`).

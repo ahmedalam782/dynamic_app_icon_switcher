@@ -31,6 +31,7 @@ class SplashGate extends StatefulWidget {
 }
 
 class _SplashGateState extends State<SplashGate> {
+  final BrandConfigApi _brandApi = BrandConfigApi();
   final SplashCacheService _splashCache = SplashCacheService();
   final DynamicAppIconService _iconService = DynamicAppIconService();
 
@@ -56,7 +57,7 @@ class _SplashGateState extends State<SplashGate> {
     await Future<void>.delayed(const Duration(milliseconds: 900));
 
     try {
-      final brand = await BrandConfigApi.fetchBrandConfig();
+      final brand = await _brandApi.fetchBrandConfig();
 
       if (mounted) {
         final synced = await _splashCache.syncFromApi(
@@ -182,6 +183,7 @@ class IconHomePage extends StatefulWidget {
 }
 
 class _IconHomePageState extends State<IconHomePage> {
+  final BrandConfigApi _brandApi = BrandConfigApi();
   bool _loadingConfig = true;
   bool _supported = false;
   String _current = 'default';
@@ -206,7 +208,7 @@ class _IconHomePageState extends State<IconHomePage> {
       _status = 'Loading brand config from API…';
     });
     try {
-      final brand = await BrandConfigApi.fetchBrandConfig();
+      final brand = await _brandApi.fetchBrandConfig();
       final apply = await widget.iconService.applyFromConfig(brand.appIcon);
 
       final supported = await widget.iconService.supportsAlternateIcons();

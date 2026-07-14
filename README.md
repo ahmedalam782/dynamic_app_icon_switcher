@@ -1,6 +1,6 @@
 # dynamic_app_icon_switcher
 
-Flutter plugin to change the **home-screen launcher icon** at runtime on Android and iOS — controlled by **your HTTP API** (not Firebase / Firestore / Remote Config).
+Flutter plugin to change the **home-screen launcher icon** at runtime on Android and iOS — controlled by **your Dio / HTTP API** (not Firebase / Firestore / Remote Config).
 
 ---
 
@@ -23,7 +23,7 @@ Flutter plugin to change the **home-screen launcher icon** at runtime on Android
 ```
 Admin / Backend
       │
-      │  GET /api/branding
+      │  GET /branding   (via Dio)
       ▼
 ┌─────────────────────────────────────┐
 │  { app_icon: {...}, splash: {...} }│
@@ -31,6 +31,9 @@ Admin / Backend
       │
       ▼
    User App
+      │
+      ├─► BrandConfigApi (Dio)
+      │     • GET /branding
       │
       ├─► DynamicAppIconService
       │     • read active_icon + icon_version
@@ -45,7 +48,7 @@ Admin / Backend
             • next cold start shows new splash reliably
 ```
 
-**Control layer = your HTTP API.** Same product flow as a Firestore setup — only the transport changes.
+**Control layer = your API over Dio.** Same product flow as a Firestore setup — only the transport is Dio.
 
 ---
 
@@ -54,10 +57,12 @@ Admin / Backend
 ```yaml
 dependencies:
   dynamic_app_icon_switcher: ^0.1.0
+  dio: ^5.9.0                  # fetch branding from your API
   shared_preferences: ^2.5.3   # persist last applied icon + splash (example)
 ```
 
 ```dart
+import 'package:dio/dio.dart';
 import 'package:dynamic_app_icon_switcher/dynamic_app_icon_switcher.dart';
 ```
 
@@ -65,20 +70,19 @@ import 'package:dynamic_app_icon_switcher/dynamic_app_icon_switcher.dart';
 
 ## Backend API contract
 
-Single endpoint (name is up to you), e.g. `GET /api/branding`:
+Single endpoint (name is up to you), e.g. `GET /branding`:
 
 ```json
 {
   "app_icon": {
     "enabled": true,
-    "active_icon": "WorldCup",
-    "icon_version": "2",
-    "available_icons": ["Red", "Blue", "Green", "WorldCup"],
+    "active_icon": "Ramadan",
+    "icon_version": "3",
+    "available_icons": ["Ramadan", "EidAdha", "Red", "Blue", "Green", "WorldCup"],
     "icon_schedule": [
-      { "icon": "WorldCup", "from": "2026-06-01", "to": "2026-07-31" },
-      { "icon": "Green", "from": "2026-07-01", "to": "2026-07-20" },
-      { "icon": "Red", "from": "2026-01-01", "to": "2026-06-30" },
-      { "icon": "Blue", "from": "2026-08-01", "to": "2026-12-31" }
+      { "icon": "Ramadan", "from": "2026-02-01", "to": "2026-03-31" },
+      { "icon": "EidAdha", "from": "2026-05-01", "to": "2026-06-30" },
+      { "icon": "WorldCup", "from": "2026-06-01", "to": "2026-07-31" }
     ]
   },
   "splash": {
@@ -94,7 +98,7 @@ Single endpoint (name is up to you), e.g. `GET /api/branding`:
 | Field | Type | Purpose |
 |---|---|---|
 | `enabled` | `bool` | When `false`, do not change the launcher icon |
-| `active_icon` | `string` | Pre-bundled key to apply (e.g. `ramadan`, `WorldCup`). Use `default` for primary |
+| `active_icon` | `string` | Pre-bundled key to apply (e.g. `Ramadan`, `EidAdha`). Use `default` for primary |
 | `icon_version` | `string` | Bump when `active_icon` changes so clients re-apply |
 | `available_icons` | `string[]` | Optional allow-list for a manual picker UI |
 | `icon_schedule` | `object[]` | Optional date windows (`from` / `to` as `YYYY-MM-DD`) |
@@ -123,18 +127,26 @@ To restore default splash:
 
 ## Usage
 
-### 1) Fetch and parse
+### 1) Fetch with Dio and parse
 
 ```dart
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 import 'package:dynamic_app_icon_switcher/dynamic_app_icon_switcher.dart';
 
-final res = await http.get(Uri.parse('https://api.example.com/branding'));
-final brand = RemoteBrandConfig.parse(
-  jsonDecode(res.body) as Map<String, dynamic>,
-);
+final dio = Dio(BaseOptions(baseUrl: 'https://api.example.com'));
+final res = await dio.get<Map<String, dynamic>>('/branding');
+final brand = RemoteBrandConfig.parse(res.data!);
 ```
+
+Or use the example client (`BrandConfigApi` wraps Dio):
+
+```dart
+final brand = await BrandConfigApi(
+  dio: Dio(BaseOptions(baseUrl: 'https://api.example.com')),
+).fetchBrandConfig();
+```
+
+The example app ships a **demo Dio interceptor** so `flutter run` works without a live server. Swap in your real `Dio` instance for production.
 
 ### 2) Apply launcher icon (only when needed)
 
@@ -154,13 +166,13 @@ if (applied != null) {
 }
 ```
 
-Or use the example wrapper `DynamicAppIconService` which handles persistence for you.
+Or use the example wrapper `DynamicAppIconService`, which handles persistence for you.
 
 ### 3) Build a picker (never hardcode icon names in UI)
 
 ```dart
 final picker = await plugin.resolvePickerIcons(
-  remoteConfig: jsonDecode(res.body) as Map<String, dynamic>,
+  remoteConfig: res.data,
 );
 // picker = available_icons ∩ active schedule ∩ natively shipped icons
 
@@ -187,7 +199,7 @@ if (safe != current) {
 Do **not** block the first frame on the network:
 
 1. Read last splash from `shared_preferences` → paint immediately
-2. Fetch API in background
+2. Fetch API with Dio in the background
 3. Precache the CDN image
 4. Persist config only after precache succeeds
 5. Next cold start shows the new splash
@@ -226,7 +238,7 @@ See `example/lib/splash_cache_service.dart` and `example/lib/main.dart` (`Splash
 - **Splash CDN images** → change anytime without a release.
 - **Unsupported icon key** → skip silently; never crash or block app open.
 - **Same icon + version already applied** → skip native switch (no redundant OS call).
-- **API / network failure** → continue with last successful local state.
+- **API / Dio failure** → continue with last successful local state.
 
 ---
 
@@ -236,10 +248,10 @@ Use the bundled script to generate Android mipmaps, iOS PNGs, manifest, and plis
 
 ```bash
 # Windows — example app
-tool\add_alternate_icon.bat --name WorldCup --source C:\path\to\icon.png --example
+tool\add_alternate_icon.bat --name Ramadan --source C:\path\to\icon.png --example
 
 # macOS / Linux
-./tool/add_alternate_icon.sh --name WorldCup --source ./icon.png --example
+./tool/add_alternate_icon.sh --name EidAdha --source ./icon.png --example
 
 # Placeholder color (no source image)
 tool\add_alternate_icon.bat --name Promo --color E53935 --example
@@ -250,7 +262,8 @@ For another Flutter app, pass explicit paths — see [`tool/README.md`](tool/REA
 Then:
 
 ```dart
-await DynamicAppIconSwitcher().setIcon('WorldCup');
+await DynamicAppIconSwitcher().setIcon('Ramadan');
+await DynamicAppIconSwitcher().setIcon('EidAdha');
 await DynamicAppIconSwitcher().setIcon('default');
 ```
 
@@ -258,17 +271,17 @@ await DynamicAppIconSwitcher().setIcon('default');
 
 ## Android setup
 
-1. Put icon files in mipmap, e.g. `res/mipmap-*/ic_worldcup.png`
+1. Put icon files in mipmap, e.g. `res/mipmap-*/ic_ramadan.png`
 2. Keep the default `MainActivity` LAUNCHER intent-filter
 3. Add one `activity-alias` per alternate icon — name **must** contain `.icons.<Name>`:
 
 ```xml
 <activity-alias
-    android:name=".icons.WorldCup"
+    android:name=".icons.Ramadan"
     android:enabled="false"
     android:exported="true"
-    android:icon="@mipmap/ic_worldcup"
-    android:label="World Cup"
+    android:icon="@mipmap/ic_ramadan"
+    android:label="Ramadan"
     android:targetActivity=".MainActivity">
     <intent-filter>
         <action android:name="android.intent.action.MAIN"/>
@@ -277,15 +290,17 @@ await DynamicAppIconSwitcher().setIcon('default');
 </activity-alias>
 ```
 
-Dart name = part after `.icons.` → `setIcon('WorldCup')`
+Dart name = part after `.icons.` → `setIcon('Ramadan')`
+
+> **Windows tip:** if the project is on `D:` and Pub cache is on `C:`, add `kotlin.incremental=false` to `android/gradle.properties` to avoid Kotlin cache errors across drive roots.
 
 ---
 
 ## iOS setup
 
 1. Add PNGs **outside** the Asset Catalog (not in `AppIcon.appiconset`):
-   - `WorldCup@2x.png` (120×120)
-   - `WorldCup@3x.png` (180×180)
+   - `Ramadan@2x.png` (120×120)
+   - `Ramadan@3x.png` (180×180)
 2. Add them to the Runner target **Copy Bundle Resources**
 3. Declare in `Info.plist`:
 
@@ -294,11 +309,11 @@ Dart name = part after `.icons.` → `setIcon('WorldCup')`
 <dict>
   <key>CFBundleAlternateIcons</key>
   <dict>
-    <key>WorldCup</key>
+    <key>Ramadan</key>
     <dict>
       <key>CFBundleIconFiles</key>
       <array>
-        <string>WorldCup</string>
+        <string>Ramadan</string>
       </array>
       <key>UIPrerenderedIcon</key>
       <false/>
@@ -321,17 +336,18 @@ flutter run
 
 | File | Role |
 |---|---|
-| `example/lib/brand_config_api.dart` | Replace with your real HTTP call |
+| `example/lib/brand_config_api.dart` | Dio client (`GET /branding`) + demo interceptor |
 | `example/lib/dynamic_app_icon_service.dart` | Apply `active_icon` + persist version |
 | `example/lib/splash_cache_service.dart` | Cached splash + CDN precache |
 | `example/lib/main.dart` | `SplashGate` boot flow + icon picker demo |
 
 Demonstrates:
 
-- API-driven `active_icon` + `icon_version`
+- Dio-driven `active_icon` + `icon_version` (demo: `Ramadan`)
+- Seasonal icons: `Ramadan`, `EidAdha`, plus Red / Blue / Green / WorldCup
 - Cached splash (instant first paint, background sync)
 - Picker filtered by `available_icons` ∩ schedule ∩ native
-- Graceful fallback when API fails
+- Graceful fallback when Dio / API fails
 
 ---
 
