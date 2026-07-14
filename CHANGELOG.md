@@ -8,3 +8,5 @@
   `RemoteSplashConfig`) — control layer is your backend via **Dio**, not Firebase.
 * Example: Dio `BrandConfigApi`, auto-apply `active_icon`, cached splash sync,
   and seasonal demo icons (`Ramadan`, `EidAdha`).
+* Example **Admin (API)** simulator: change `active_icon` anytime without a
+  rebuild (icons must already be shipped in the binary).

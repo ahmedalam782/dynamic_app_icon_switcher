@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:dynamic_app_icon_switcher/dynamic_app_icon_switcher.dart';
 
+import 'demo_brand_store.dart';
+
 /// Fetches icon + splash brand config from **your backend API** via [Dio].
 ///
 /// Production:
@@ -11,14 +13,20 @@ import 'package:dynamic_app_icon_switcher/dynamic_app_icon_switcher.dart';
 /// final brand = await api.fetchBrandConfig();
 /// ```
 ///
-/// The example app uses a demo [Dio] interceptor so no live server is required.
+/// The example app uses a demo [Dio] interceptor backed by [DemoBrandStore]
+/// so no live server is required. Call [setActiveIconAsAdmin] to simulate an
+/// admin changing the launcher icon anytime (must already be bundled).
 class BrandConfigApi {
-  BrandConfigApi({Dio? dio}) : _dio = dio ?? createDemoDio();
+  BrandConfigApi({Dio? dio, DemoBrandStore? store})
+      : _dio = dio ?? createDemoDio(store: store),
+        _store = store ?? DemoBrandStore.instance;
 
   final Dio _dio;
+  final DemoBrandStore _store;
 
-  /// Demo Dio client that resolves `GET /branding` from an in-memory payload.
-  static Dio createDemoDio() {
+  /// Demo Dio client that resolves `GET /branding` from [DemoBrandStore].
+  static Dio createDemoDio({DemoBrandStore? store}) {
+    final brandStore = store ?? DemoBrandStore.instance;
     final dio = Dio(
       BaseOptions(
         baseUrl: 'https://api.example.com',
@@ -30,16 +38,18 @@ class BrandConfigApi {
 
     dio.interceptors.add(
       InterceptorsWrapper(
-        onRequest: (RequestOptions options, RequestInterceptorHandler handler) async {
+        onRequest:
+            (RequestOptions options, RequestInterceptorHandler handler) async {
           // Simulate network latency like a real backend.
           await Future<void>.delayed(const Duration(milliseconds: 400));
 
-          if (options.path == '/branding' || options.path.endsWith('/branding')) {
+          if (options.path == '/branding' ||
+              options.path.endsWith('/branding')) {
             handler.resolve(
               Response<Map<String, dynamic>>(
                 requestOptions: options,
                 statusCode: 200,
-                data: _demoPayload,
+                data: Map<String, dynamic>.from(brandStore.payload),
               ),
             );
             return;
@@ -81,57 +91,11 @@ class BrandConfigApi {
     return RemoteBrandConfig.parse(data);
   }
 
-  /// Demo JSON the interceptor returns for `GET /branding`.
-  static const Map<String, dynamic> _demoPayload = <String, dynamic>{
-    'app_icon': <String, dynamic>{
-      'enabled': true,
-      'active_icon': 'Ramadan',
-      'icon_version': '3',
-      'available_icons': <String>[
-        'Ramadan',
-        'EidAdha',
-        'Red',
-        'Blue',
-        'Green',
-        'WorldCup',
-      ],
-      'icon_schedule': <Map<String, String>>[
-        <String, String>{
-          'icon': 'Ramadan',
-          'from': '2026-02-01',
-          'to': '2026-03-31',
-        },
-        <String, String>{
-          'icon': 'EidAdha',
-          'from': '2026-05-01',
-          'to': '2026-06-30',
-        },
-        <String, String>{
-          'icon': 'WorldCup',
-          'from': '2026-06-01',
-          'to': '2026-07-31',
-        },
-        <String, String>{
-          'icon': 'Green',
-          'from': '2026-07-01',
-          'to': '2026-07-20',
-        },
-        <String, String>{
-          'icon': 'Red',
-          'from': '2026-01-01',
-          'to': '2026-06-30',
-        },
-        <String, String>{
-          'icon': 'Blue',
-          'from': '2026-08-01',
-          'to': '2026-12-31',
-        },
-      ],
-    },
-    'splash': <String, dynamic>{
-      'use_default_splash': true,
-      'image_url': '',
-      'image_version': '1',
-    },
-  };
+  /// Demo-only: pretend an admin updated `active_icon` on the server.
+  ///
+  /// In production, your admin panel writes the same fields to your DB / CMS,
+  /// then mobile clients call [fetchBrandConfig] and `applyFromConfig`.
+  void setActiveIconAsAdmin(String iconName, {bool enabled = true}) {
+    _store.setActiveIcon(iconName, enabled: enabled);
+  }
 }

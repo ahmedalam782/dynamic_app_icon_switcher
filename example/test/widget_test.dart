@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:dynamic_app_icon_switcher_example/demo_brand_store.dart';
 import 'package:dynamic_app_icon_switcher_example/main.dart';
 import 'package:dynamic_app_icon_switcher/dynamic_app_icon_switcher_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
@@ -35,6 +36,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
+    DemoBrandStore.instance.reset();
     DynamicAppIconSwitcherPlatform.instance =
         MockDynamicAppIconSwitcherPlatform();
   });
@@ -50,5 +52,6 @@ void main() {
 
     expect(find.textContaining('Supported:'), findsOneWidget);
     expect(find.textContaining('API active_icon:'), findsOneWidget);
+    expect(find.textContaining('Admin (API)'), findsOneWidget);
   });
 }

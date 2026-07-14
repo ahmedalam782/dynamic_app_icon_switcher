@@ -278,9 +278,25 @@ class _IconHomePageState extends State<IconHomePage> {
     }
   }
 
+  /// Admin changes API `active_icon` → client refetches → applies without rebuild.
+  Future<void> _adminSetActiveIcon(String name) async {
+    if (_busy || _loadingConfig) return;
+    setState(() {
+      _busy = true;
+      _status = 'Admin set active_icon=$name — fetching API…';
+    });
+    try {
+      _brandApi.setActiveIconAsAdmin(name);
+      await _refresh();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final choices = <String>['default', ..._picker];
+    final adminChoices = <String>['default', ..._shipped];
 
     return Scaffold(
       appBar: AppBar(
@@ -299,21 +315,56 @@ class _IconHomePageState extends State<IconHomePage> {
           if (_loadingConfig) const LinearProgressIndicator(),
           Text('Supported: $_supported'),
           Text('Current icon: $_current'),
-          Text('API active_icon: ${_activeFromApi ?? '—'} (v${_iconVersion ?? '—'})'),
+          Text(
+            'API active_icon: ${_activeFromApi ?? '—'} '
+            '(v${_iconVersion ?? '—'})',
+          ),
           Text('Shipped (native): ${_shipped.join(', ')}'),
           Text('Splash: ${_splashSummary ?? '—'}'),
           Text('Picker (API ∩ schedule ∩ native): ${_picker.join(', ')}'),
           const SizedBox(height: 8),
           const Text(
-            'Flow (API, not Firebase):\n'
-            '1. GET /branding → app_icon + splash\n'
-            '2. Apply active_icon when icon_version changes\n'
-            '3. Precache splash URL, then save locally\n'
-            '4. Next launch paints cached splash instantly',
+            'Two steps:\n'
+            '1. Add icons to the app once, then build/release.\n'
+            '2. Admin changes active_icon via API anytime — no new store build.\n'
+            '\n'
+            'Client flow:\n'
+            '• GET /branding → app_icon + splash\n'
+            '• Apply active_icon when icon_version changes\n'
+            '• Precache splash URL, then save locally',
           ),
           const SizedBox(height: 12),
           if (_status != null) Text(_status!),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+          const Text(
+            'Admin (API) — change active icon anytime',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Simulates your admin panel updating GET /branding. '
+            'Only pre-shipped keys work.',
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final name in adminChoices)
+                FilledButton.tonal(
+                  onPressed: (_busy || _loadingConfig)
+                      ? null
+                      : () => _adminSetActiveIcon(name),
+                  child: Text('API → $name'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Manual picker (local setIcon)',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -329,7 +380,8 @@ class _IconHomePageState extends State<IconHomePage> {
           ),
           const SizedBox(height: 24),
           const Text(
-            'Edit example/lib/brand_config_api.dart to point at your real API.',
+            'Production: point BrandConfigApi at your real Dio baseUrl. '
+            'Admin writes active_icon + icon_version; app only GETs /branding.',
           ),
         ],
       ),

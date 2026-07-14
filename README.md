@@ -231,6 +231,38 @@ See `example/lib/splash_cache_service.dart` and `example/lib/main.dart` (`Splash
 
 ---
 
+## How admin changes the icon anytime
+
+Two separate steps:
+
+| Step | Who | What | Needs store release? |
+|---|---|---|---|
+| **1. Ship artwork** | Developer | Add icon PNGs + Android `activity-alias` + iOS `CFBundleAlternateIcons`, then build | **Yes** (once per new design) |
+| **2. Activate icon** | Admin / backend | Set `active_icon` + bump `icon_version` on `GET /branding` | **No** |
+
+```
+Admin panel ──writes──► your API (active_icon = "EidAdha", icon_version = "4")
+                              │
+                     GET /branding (Dio)
+                              ▼
+                         User app
+                              │
+              applyActiveIconIfNeeded / applyFromConfig
+                              ▼
+                 Native setIcon('EidAdha')  ← key already in the binary
+```
+
+**Admin checklist**
+
+1. Choose a key that already exists in the app (e.g. `Ramadan`, `EidAdha`).
+2. Update branding JSON: `"active_icon": "EidAdha"`, `"icon_version": "<new>"`.
+3. Clients fetch `/branding` (on launch, pull-to-refresh, or push) and switch.
+4. To add a *new* picture never shipped before → run `tool/add_alternate_icon` and ship a new build first.
+
+The example app includes an **Admin (API)** section that mutates the demo branding store and re-fetches — same path as production, no rebuild required for step 2.
+
+---
+
 ## Important rules
 
 - **New launcher artwork** → new store build (`mipmap` / `CFBundleAlternateIcons`).
@@ -344,7 +376,8 @@ flutter run
 Demonstrates:
 
 - Dio-driven `active_icon` + `icon_version` (demo: `Ramadan`)
-- Seasonal icons: `Ramadan`, `EidAdha`, plus Red / Blue / Green / WorldCup
+- **Admin (API)** buttons: change `active_icon` anytime → refetch → apply (no rebuild)
+- Seasonal icons: `Ramadan`, `EidAdha`, plus Red / Blue / Green / WorldCup / Promo
 - Cached splash (instant first paint, background sync)
 - Picker filtered by `available_icons` ∩ schedule ∩ native
 - Graceful fallback when Dio / API fails
