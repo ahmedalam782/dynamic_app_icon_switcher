@@ -79,6 +79,26 @@
 		</dict>
 		<key>CFBundleAlternateIcons</key>
 		<dict>
+			<key>EidAdha</key>
+			<dict>
+				<key>CFBundleIconFiles</key>
+				<array>
+					<string>EidAdha</string>
+				</array>
+				<key>UIPrerenderedIcon</key>
+				<false/>
+			</dict>
+
+			<key>Ramadan</key>
+			<dict>
+				<key>CFBundleIconFiles</key>
+				<array>
+					<string>Ramadan</string>
+				</array>
+				<key>UIPrerenderedIcon</key>
+				<false/>
+			</dict>
+
 			<key>Promo</key>
 			<dict>
 				<key>CFBundleIconFiles</key>

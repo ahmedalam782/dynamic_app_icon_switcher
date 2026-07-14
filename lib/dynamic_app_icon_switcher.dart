@@ -2,8 +2,10 @@ import 'package:flutter/services.dart';
 
 import 'dynamic_app_icon_switcher_platform_interface.dart';
 import 'src/icon_availability.dart';
+import 'src/remote_brand_config.dart';
 
 export 'src/icon_availability.dart';
+export 'src/remote_brand_config.dart';
 
 /// Error codes returned via [PlatformException.code].
 abstract final class DynamicAppIconSwitcherErrorCodes {
@@ -51,10 +53,11 @@ class DynamicAppIconSwitcher {
   }
 
   /// Builds the picker list from natively shipped icons intersected with
-  /// optional remote availability / schedule data.
+  /// optional API availability / schedule data.
   ///
-  /// Does **not** hardcode icon names — callers supply Remote Config (or any
-  /// JSON map) and this method filters against what the OS can actually set.
+  /// Pass either a full brand payload (`app_icon` nested) or a flat legacy
+  /// `{ available_icons, icon_schedule }` map. Only icons that exist on the
+  /// device are returned.
   Future<List<String>> resolvePickerIcons({
     Map<String, dynamic>? remoteConfig,
     DateTime? now,
@@ -63,13 +66,41 @@ class DynamicAppIconSwitcher {
     if (remoteConfig == null) {
       return IconAvailability.resolveAvailable(shippedIcons: shipped);
     }
-    final config = IconAvailability.parseConfig(remoteConfig);
+    final brand = RemoteBrandConfig.parse(remoteConfig);
+    final config = brand.appIcon;
+    final available = config.availableIcons.isEmpty
+        ? null
+        : config.availableIcons;
     return IconAvailability.resolveAvailable(
       shippedIcons: shipped,
-      availableFromRemote: config.availableIcons,
+      availableFromRemote: available,
       schedule: config.schedule,
       now: now,
     );
+  }
+
+  /// Applies [config.activeIcon] when the API version / key changed.
+  ///
+  /// Persisting [lastAppliedIcon] / [lastAppliedVersion] is the app's job
+  /// (e.g. `shared_preferences`). Returns the icon that was set, or `null`
+  /// when no native switch was needed.
+  Future<String?> applyActiveIconIfNeeded({
+    required RemoteAppIconConfig config,
+    required String? lastAppliedIcon,
+    required String? lastAppliedVersion,
+  }) async {
+    final shipped = (await getAvailableIcons()).toSet();
+    if (!config.shouldApply(
+      shippedIcons: shipped,
+      lastAppliedIcon: lastAppliedIcon,
+      lastAppliedVersion: lastAppliedVersion,
+    )) {
+      return null;
+    }
+
+    final target = config.targetIconName;
+    await setIcon(target);
+    return target;
   }
 
   /// If [current] is no longer in [visibleIcons], returns `'default'`.

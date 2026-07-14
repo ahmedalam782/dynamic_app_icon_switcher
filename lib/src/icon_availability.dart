@@ -1,9 +1,10 @@
 /// Parses remote icon availability config and merges it with natively shipped
 /// icon names.
 ///
-/// App icons are native resources resolved at install time. Remote Config can
-/// only control which *already-shipped* icons appear in a picker — it cannot
-/// introduce a new icon design without a new binary.
+/// App icons are native resources resolved at install time. An HTTP API can
+/// only control which *already-shipped* icons appear in a picker or are
+/// selected via `active_icon` — it cannot introduce a new icon design without
+/// a new binary.
 class IconAvailability {
   IconAvailability._();
 
@@ -57,7 +58,7 @@ class IconAvailability {
     return candidates.where(activeBySchedule.contains).toList(growable: false);
   }
 
-  /// Parses a JSON-like map from Remote Config / an internal API.
+  /// Parses a JSON-like map from your HTTP API.
   ///
   /// Expected shape:
   /// ```json

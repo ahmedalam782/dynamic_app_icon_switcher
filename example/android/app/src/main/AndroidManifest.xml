@@ -85,7 +85,31 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+        </activity-alias>        <activity-alias
+            android:name=".icons.Ramadan"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_ramadan"
+            android:label="Ramadan"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>        <activity-alias
+            android:name=".icons.EidAdha"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_eid_adha"
+            android:label="EidAdha"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
         </activity-alias>
+
+
 
 
         <meta-data

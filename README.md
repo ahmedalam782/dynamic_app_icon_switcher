@@ -1,114 +1,51 @@
 # dynamic_app_icon_switcher
 
-Flutter plugin لتغيير **أيقونة التطبيق على الشاشة الرئيسية** أثناء التشغيل على Android و iOS.
+Flutter plugin to change the **home-screen launcher icon** at runtime on Android and iOS — controlled by **your HTTP API** (not Firebase / Firestore / Remote Config).
 
 ---
 
-## شرح سريع بالعربية — كيف تستخدمه؟
+## الفكرة — Idea
 
-### الفكرة
-الأيقونة على الشاشة الرئيسية **ليست صورة Flutter**.  
-هي ملف أصلي داخل التطبيق:
+**English:** Alternate launcher icons must be bundled in the app at build time. Your backend API only selects which pre-shipped icon key is active and serves a splash image URL. No store release is needed to *switch* between icons you already shipped — only to add *new* artwork.
 
-| المنصة | أين تضع الصورة؟ | كيف تعلنها؟ |
+**العربية:** أيقونة الـ Launcher لا يمكن تحميلها من الإنترنت وقت التشغيل. الأيقونات لازم تكون موجودة داخل التطبيق وقت الـ Build. الـ API يحدد فقط أي Key مفعّل (`active_icon`) ويرسل رابط الـ Splash. التبديل بين أيقونات موجودة مسبقًا لا يحتاج Release جديد — إضافة تصميم جديد فقط تحتاج Release.
+
+| Piece | API sends | App does |
 |---|---|---|
-| Android | `mipmap` أو `drawable` | `activity-alias` باسم `.icons.Name` |
-| iOS | PNG خارج Asset Catalog | `CFBundleAlternateIcons` في `Info.plist` |
+| **App icon** | `active_icon` + `icon_version` | Native `setIcon` for a **pre-bundled** key |
+| **Splash** | CDN `image_url` + `image_version` | Precache → save locally → show on next launch |
+| **Picker (optional)** | `available_icons` + `icon_schedule` | Filter against natively shipped icons |
 
-بعدها من Dart:
+---
 
-```dart
-await DynamicAppIconSwitcher().setIcon('WorldCup'); // تغيير
-await DynamicAppIconSwitcher().setIcon('default');  // رجوع للأصلية
+## Architecture
+
+```
+Admin / Backend
+      │
+      │  GET /api/branding
+      ▼
+┌─────────────────────────────────────┐
+│  { app_icon: {...}, splash: {...} }│
+└─────────────────────────────────────┘
+      │
+      ▼
+   User App
+      │
+      ├─► DynamicAppIconService
+      │     • read active_icon + icon_version
+      │     • skip if same key/version already applied
+      │     • skip if key not shipped natively
+      │     • native setIcon (Android alias / iOS alternate)
+      │
+      └─► SplashCacheService
+            • paint last cached splash immediately
+            • fetch API in background
+            • precache CDN image → persist on success
+            • next cold start shows new splash reliably
 ```
 
-### خطوات الاستخدام (من الصفر)
-
-**1) ثبّت الحزمة**
-
-```yaml
-dependencies:
-  dynamic_app_icon_switcher: ^0.1.0
-```
-
-**2) أضف الأيقونات الأصلية (مرة واحدة مع كل تصميم جديد = يحتاج build جديد)**
-
-أسهل طريقة — شغّل سكربت التوليد:
-
-```bash
-# من جذر الحزمة — بصورة جاهزة
-tool\add_alternate_icon.bat --name WorldCup --source C:\path\to\icon.png --example
-
-# أو لون تجريبي بدون صورة
-tool\add_alternate_icon.bat --name Promo --color E53935 --example
-```
-
-السكربت يقوم بـ:
-1. توليد كل مقاسات Android (`mipmap-*`) و iOS (`@2x` / `@3x`)
-2. إضافة `activity-alias` في `AndroidManifest.xml`
-3. إضافة الإدخال في `Info.plist`
-4. تسجيل الملفات في Xcode `project.pbxproj`
-
-ثم: `flutter run` واستدعِ `setIcon('WorldCup')`.
-
-تفاصيل أكثر: [`tool/README.md`](tool/README.md)
-
-**3) في التطبيق: حمّل الإعداد من API ثم ابنِ الـ picker**
-
-```dart
-final plugin = DynamicAppIconSwitcher();
-
-// من سيرفرك / Firebase Remote Config
-final remote = await fetchIconConfigFromApi();
-
-final picker = await plugin.resolvePickerIcons(remoteConfig: remote);
-// مثال نتيجة: ['WorldCup', 'Green']
-
-// لا تكتب أسماء الأيقونات ثابتة في الواجهة — استخدم picker
-for (final name in picker) {
-  // زر → plugin.setIcon(name)
-}
-```
-
-شكل JSON المتوقع من الـ API:
-
-```json
-{
-  "available_icons": ["Red", "Blue", "Green", "WorldCup"],
-  "icon_schedule": [
-    { "icon": "WorldCup", "from": "2026-06-01", "to": "2026-07-31" },
-    { "icon": "Green", "from": "2026-07-01", "to": "2026-07-20" },
-    { "icon": "Red", "from": "2026-01-01", "to": "2026-06-30" },
-    { "icon": "Blue", "from": "2026-08-01", "to": "2026-12-31" }
-  ]
-}
-```
-
-المعنى:
-
-- `available_icons` = الأيقونات المسموح عرضها من السيرفر
-- `icon_schedule` = متى تظهر كل أيقونة (حسب التاريخ)
-- البلجن يطبّق: **API ∩ الجدول الزمني ∩ الأيقونات المدمجة أصلاً**
-
-**4) إذا الأيقونة الحالية اختفت من الـ picker**
-
-```dart
-final safe = plugin.fallbackIfUnavailable(
-  current: await plugin.currentIcon(),
-  visibleIcons: picker,
-);
-if (safe == 'default') {
-  await plugin.setIcon('default');
-}
-```
-
-### مهم جداً
-- لا يمكن إضافة تصميم أيقونة جديد عبر Flutter `assets` أو رابط صورة أو Shorebird.
-- أي تصميم جديد يحتاج إضافته في `mipmap` / iOS ثم رفع إصدار جديد للمتجر.
-- بعد الإصدار، يمكنك إظهار/إخفاء الأيقونات عبر الـ API بدون build جديد.
-- على بعض أجهزة Android (EMUI / MIUI) تحديث أيقونة الـ launcher قد يتأخر ثوانٍ بعد الضغط على Home.
-
-انظر المثال: `example/lib/main.dart` و `example/lib/icon_config_api.dart`
+**Control layer = your HTTP API.** Same product flow as a Firestore setup — only the transport changes.
 
 ---
 
@@ -117,74 +54,213 @@ if (safe == 'default') {
 ```yaml
 dependencies:
   dynamic_app_icon_switcher: ^0.1.0
+  shared_preferences: ^2.5.3   # persist last applied icon + splash (example)
 ```
 
 ```dart
 import 'package:dynamic_app_icon_switcher/dynamic_app_icon_switcher.dart';
 ```
 
-## API
+---
 
-| Method | Description |
-|---|---|
-| `supportsAlternateIcons()` | هل الجهاز يدعم تبديل الأيقونة؟ |
-| `setIcon(name)` | يغيّر الأيقونة (`'default'` للأصلية) |
-| `currentIcon()` | الاسم الحالي أو `'default'` |
-| `getAvailableIcons()` | الأسماء المعلنة أصلياً في التطبيق |
-| `resolvePickerIcons(remoteConfig: …)` | قائمة الـ picker بعد فلترة API + الجدول |
-| `fallbackIfUnavailable(…)` | يرجع `'default'` إذا الأيقونة الحالية لم تعد متاحة |
+## Backend API contract
 
-## Usage (Dart)
+Single endpoint (name is up to you), e.g. `GET /api/branding`:
+
+```json
+{
+  "app_icon": {
+    "enabled": true,
+    "active_icon": "WorldCup",
+    "icon_version": "2",
+    "available_icons": ["Red", "Blue", "Green", "WorldCup"],
+    "icon_schedule": [
+      { "icon": "WorldCup", "from": "2026-06-01", "to": "2026-07-31" },
+      { "icon": "Green", "from": "2026-07-01", "to": "2026-07-20" },
+      { "icon": "Red", "from": "2026-01-01", "to": "2026-06-30" },
+      { "icon": "Blue", "from": "2026-08-01", "to": "2026-12-31" }
+    ]
+  },
+  "splash": {
+    "use_default_splash": false,
+    "image_url": "https://cdn.example.com/ramadan-splash.webp",
+    "image_version": "4"
+  }
+}
+```
+
+### `app_icon` fields
+
+| Field | Type | Purpose |
+|---|---|---|
+| `enabled` | `bool` | When `false`, do not change the launcher icon |
+| `active_icon` | `string` | Pre-bundled key to apply (e.g. `ramadan`, `WorldCup`). Use `default` for primary |
+| `icon_version` | `string` | Bump when `active_icon` changes so clients re-apply |
+| `available_icons` | `string[]` | Optional allow-list for a manual picker UI |
+| `icon_schedule` | `object[]` | Optional date windows (`from` / `to` as `YYYY-MM-DD`) |
+
+### `splash` fields
+
+| Field | Type | Purpose |
+|---|---|---|
+| `use_default_splash` | `bool` | When `true`, use built-in / last-default splash UI |
+| `image_url` | `string` | CDN URL (ImageKit, S3, etc.) |
+| `image_version` | `string` | Bump when the image changes (cache bust via `?splash_version=`) |
+
+To restore default splash:
+
+```json
+{
+  "splash": {
+    "use_default_splash": true,
+    "image_url": "",
+    "image_version": "5"
+  }
+}
+```
+
+---
+
+## Usage
+
+### 1) Fetch and parse
 
 ```dart
-final icons = DynamicAppIconSwitcher();
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:dynamic_app_icon_switcher/dynamic_app_icon_switcher.dart';
 
-if (!await icons.supportsAlternateIcons()) return;
+final res = await http.get(Uri.parse('https://api.example.com/branding'));
+final brand = RemoteBrandConfig.parse(
+  jsonDecode(res.body) as Map<String, dynamic>,
+);
+```
 
-// Load from your API / Remote Config
-final remoteConfig = await yourApi.fetchIconConfig();
+### 2) Apply launcher icon (only when needed)
 
-final picker = await icons.resolvePickerIcons(remoteConfig: remoteConfig);
+```dart
+final plugin = DynamicAppIconSwitcher();
+final prefs = await SharedPreferences.getInstance();
 
-final current = await icons.currentIcon();
-final safe = icons.fallbackIfUnavailable(
+final applied = await plugin.applyActiveIconIfNeeded(
+  config: brand.appIcon,
+  lastAppliedIcon: prefs.getString('applied_active_icon'),
+  lastAppliedVersion: prefs.getString('applied_icon_version'),
+);
+
+if (applied != null) {
+  await prefs.setString('applied_active_icon', applied);
+  await prefs.setString('applied_icon_version', brand.appIcon.iconVersion);
+}
+```
+
+Or use the example wrapper `DynamicAppIconService` which handles persistence for you.
+
+### 3) Build a picker (never hardcode icon names in UI)
+
+```dart
+final picker = await plugin.resolvePickerIcons(
+  remoteConfig: jsonDecode(res.body) as Map<String, dynamic>,
+);
+// picker = available_icons ∩ active schedule ∩ natively shipped icons
+
+for (final name in picker) {
+  // show button → plugin.setIcon(name)
+}
+```
+
+### 4) Fallback when current icon leaves the picker
+
+```dart
+final current = await plugin.currentIcon();
+final safe = plugin.fallbackIfUnavailable(
   current: current,
   visibleIcons: picker,
 );
 if (safe != current) {
-  await icons.setIcon('default');
-}
-
-await icons.setIcon(picker.first); // e.g. WorldCup
-print(await icons.currentIcon());
-await icons.setIcon('default');
-```
-
-### API / Remote Config JSON
-
-```json
-{
-  "available_icons": ["Red", "Blue", "Green", "WorldCup"],
-  "icon_schedule": [
-    { "icon": "WorldCup", "from": "2026-06-01", "to": "2026-07-31" },
-    { "icon": "Green", "from": "2026-07-01", "to": "2026-07-20" },
-    { "icon": "Red", "from": "2026-01-01", "to": "2026-06-30" },
-    { "icon": "Blue", "from": "2026-08-01", "to": "2026-12-31" }
-  ]
+  await plugin.setIcon('default');
 }
 ```
 
-Picker logic:
+### 5) Splash startup flow
 
-`available_icons` ∩ active `icon_schedule` ∩ native aliases/plist
+Do **not** block the first frame on the network:
 
-Icons listed by the API but **not** shipped natively are ignored / fail with `ICON_NOT_FOUND` on `setIcon`.
+1. Read last splash from `shared_preferences` → paint immediately
+2. Fetch API in background
+3. Precache the CDN image
+4. Persist config only after precache succeeds
+5. Next cold start shows the new splash
+
+See `example/lib/splash_cache_service.dart` and `example/lib/main.dart` (`SplashGate`).
+
+---
+
+## Plugin API
+
+| Method | Description |
+|---|---|
+| `supportsAlternateIcons()` | Whether the device supports alternate icons |
+| `setIcon(name)` | Switch icon (`'default'` restores primary) |
+| `currentIcon()` | Active name or `'default'` |
+| `getAvailableIcons()` | Names declared in the native binary |
+| `resolvePickerIcons(remoteConfig: …)` | Picker = API ∩ schedule ∩ native |
+| `applyActiveIconIfNeeded(…)` | Apply `active_icon` when key/version changed |
+| `fallbackIfUnavailable(…)` | Returns `'default'` if current icon left the picker |
+
+### Models (exported)
+
+| Class | Role |
+|---|---|
+| `RemoteBrandConfig` | Parses full `{ app_icon, splash }` JSON |
+| `RemoteAppIconConfig` | `enabled`, `active_icon`, `icon_version`, allow-list, schedule |
+| `RemoteSplashConfig` | `use_default_splash`, `image_url`, `image_version`, cache-busted URL |
+| `IconAvailability` / `IconScheduleEntry` | Schedule filtering helpers |
+
+---
+
+## Important rules
+
+- **New launcher artwork** → new store build (`mipmap` / `CFBundleAlternateIcons`).
+- **Existing keys** → switch anytime via API (`active_icon` + bump `icon_version`).
+- **Splash CDN images** → change anytime without a release.
+- **Unsupported icon key** → skip silently; never crash or block app open.
+- **Same icon + version already applied** → skip native switch (no redundant OS call).
+- **API / network failure** → continue with last successful local state.
+
+---
+
+## Ship alternate icons (one-time per design)
+
+Use the bundled script to generate Android mipmaps, iOS PNGs, manifest, and plist entries:
+
+```bash
+# Windows — example app
+tool\add_alternate_icon.bat --name WorldCup --source C:\path\to\icon.png --example
+
+# macOS / Linux
+./tool/add_alternate_icon.sh --name WorldCup --source ./icon.png --example
+
+# Placeholder color (no source image)
+tool\add_alternate_icon.bat --name Promo --color E53935 --example
+```
+
+For another Flutter app, pass explicit paths — see [`tool/README.md`](tool/README.md).
+
+Then:
+
+```dart
+await DynamicAppIconSwitcher().setIcon('WorldCup');
+await DynamicAppIconSwitcher().setIcon('default');
+```
+
+---
 
 ## Android setup
 
 1. Put icon files in mipmap, e.g. `res/mipmap-*/ic_worldcup.png`
 2. Keep the default `MainActivity` LAUNCHER intent-filter
-3. Add one `activity-alias` per alternate icon — name must contain `.icons.<Name>`:
+3. Add one `activity-alias` per alternate icon — name **must** contain `.icons.<Name>`:
 
 ```xml
 <activity-alias
@@ -202,6 +278,8 @@ Icons listed by the API but **not** shipped natively are ignored / fail with `IC
 ```
 
 Dart name = part after `.icons.` → `setIcon('WorldCup')`
+
+---
 
 ## iOS setup
 
@@ -231,81 +309,58 @@ Dart name = part after `.icons.` → `setIcon('WorldCup')`
 
 Test on a **real iPhone** — Simulator is unreliable for home-screen icon changes.
 
-## Adding a new icon (script)
-
-Any developer can add an icon with one command:
-
-```bash
-# Windows
-tool\add_alternate_icon.bat --name WorldCup --source path\to\icon.png --example
-
-# macOS / Linux
-chmod +x tool/add_alternate_icon.sh
-./tool/add_alternate_icon.sh --name WorldCup --source ./icon.png --example
-
-# Or placeholder color
-tool\add_alternate_icon.bat --name Promo --color 8E24AA --example
-```
-
-For another Flutter app (not this example), pass explicit paths:
-
-```bash
-dart run tool/add_alternate_icon/bin/add_alternate_icon.dart \
-  --name WorldCup \
-  --source ./worldcup.png \
-  --android-res path/to/android/app/src/main/res \
-  --manifest path/to/android/app/src/main/AndroidManifest.xml \
-  --ios-runner path/to/ios/Runner \
-  --plist path/to/ios/Runner/Info.plist \
-  --pbxproj path/to/ios/Runner.xcodeproj/project.pbxproj
-```
-
-See [`tool/README.md`](tool/README.md).
-
-### Manual checklist (if you prefer)
-
-1. Create artwork
-2. Android: mipmap files + `.icons.Name` alias
-3. iOS: `Name@2x.png` / `Name@3x.png` + plist key
-4. Ship a new store build
-5. Enable it later via API `available_icons` / `icon_schedule` (no new binary needed to show/hide)
-
-## Error codes
-
-| Code | Meaning |
-|---|---|
-| `PLATFORM_NOT_SUPPORTED` | الجهاز لا يدعم تبديل الأيقونة |
-| `ICON_NOT_FOUND` | الاسم غير موجود في Manifest / Info.plist |
-| `SET_ICON_FAILED` | فشل التغيير على المستوى الأصلي |
-
-```dart
-try {
-  await icons.setIcon('Missing');
-} on PlatformException catch (e) {
-  // e.code → ICON_NOT_FOUND / SET_ICON_FAILED / …
-}
-```
-
-## Known limitations
-
-- بعض لانشرات Android (EMUI / MIUI / ColorOS) تؤخر تحديث الأيقونة بعد الخروج للـ Home
-- iOS يظهر تنبيه نظام عند تغيير الأيقونة
-- تصميم أيقونة جديد دائماً يحتاج إصدار تطبيق جديد
-- صور Flutter `assets` أو الشبكة تصلح للمعاينة داخل التطبيق فقط، وليس لأيقونة الـ launcher
+---
 
 ## Example app
 
 ```bash
 cd example
+flutter pub get
 flutter run
 ```
 
+| File | Role |
+|---|---|
+| `example/lib/brand_config_api.dart` | Replace with your real HTTP call |
+| `example/lib/dynamic_app_icon_service.dart` | Apply `active_icon` + persist version |
+| `example/lib/splash_cache_service.dart` | Cached splash + CDN precache |
+| `example/lib/main.dart` | `SplashGate` boot flow + icon picker demo |
+
 Demonstrates:
 
-- Native icons: Red, Blue, Green, WorldCup
-- Loading config from a simulated API (`icon_config_api.dart`)
-- Schedule filtering
-- Switching icons + restoring `default`
+- API-driven `active_icon` + `icon_version`
+- Cached splash (instant first paint, background sync)
+- Picker filtered by `available_icons` ∩ schedule ∩ native
+- Graceful fallback when API fails
+
+---
+
+## Error codes
+
+| Code | Meaning |
+|---|---|
+| `PLATFORM_NOT_SUPPORTED` | Device does not support alternate icons |
+| `ICON_NOT_FOUND` | Name missing from AndroidManifest / Info.plist |
+| `SET_ICON_FAILED` | Native switch failed |
+
+```dart
+try {
+  await plugin.setIcon('Missing');
+} on PlatformException catch (e) {
+  // e.code → ICON_NOT_FOUND / SET_ICON_FAILED / …
+}
+```
+
+---
+
+## Known limitations
+
+- Some Android launchers (EMUI / MIUI / ColorOS) refresh the icon a few seconds after pressing Home
+- iOS may show a system alert when the icon changes
+- New icon **designs** always require a new app store release
+- Flutter `assets` and network images are for in-app splash / previews only — not the OS launcher icon
+
+---
 
 ## License
 

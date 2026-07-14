@@ -1,3 +1,5 @@
+import 'package:dynamic_app_icon_switcher/src/icon_availability.dart';
+import 'package:dynamic_app_icon_switcher/src/remote_brand_config.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dynamic_app_icon_switcher/dynamic_app_icon_switcher.dart';
 import 'package:dynamic_app_icon_switcher/dynamic_app_icon_switcher_platform_interface.dart';
@@ -64,5 +66,74 @@ void main() {
       ),
       'default',
     );
+  });
+
+  test('RemoteBrandConfig parses API app_icon + splash', () {
+    final brand = RemoteBrandConfig.parse(<String, dynamic>{
+      'app_icon': <String, dynamic>{
+        'enabled': true,
+        'active_icon': 'WorldCup',
+        'icon_version': '2',
+        'available_icons': <String>['Red', 'WorldCup'],
+      },
+      'splash': <String, dynamic>{
+        'use_default_splash': false,
+        'image_url': 'https://cdn.example.com/a.webp',
+        'image_version': '4',
+      },
+    });
+
+    expect(brand.appIcon.activeIcon, 'WorldCup');
+    expect(brand.appIcon.iconVersion, '2');
+    expect(brand.splash.hasRemoteImage, isTrue);
+    expect(
+      brand.splash.cacheBustedUrl,
+      'https://cdn.example.com/a.webp?splash_version=4',
+    );
+    expect(
+      brand.appIcon.shouldApply(
+        shippedIcons: <String>{'WorldCup'},
+        lastAppliedIcon: 'Red',
+        lastAppliedVersion: '1',
+      ),
+      isTrue,
+    );
+    expect(
+      brand.appIcon.shouldApply(
+        shippedIcons: <String>{'WorldCup'},
+        lastAppliedIcon: 'WorldCup',
+        lastAppliedVersion: '2',
+      ),
+      isFalse,
+    );
+  });
+
+  test('applyActiveIconIfNeeded skips same version', () async {
+    final DynamicAppIconSwitcher plugin = DynamicAppIconSwitcher();
+    final MockDynamicAppIconSwitcherPlatform fakePlatform =
+        MockDynamicAppIconSwitcherPlatform();
+    DynamicAppIconSwitcherPlatform.instance = fakePlatform;
+
+    final skipped = await plugin.applyActiveIconIfNeeded(
+      config: const RemoteAppIconConfig(
+        activeIcon: 'Red',
+        iconVersion: '2',
+      ),
+      lastAppliedIcon: 'Red',
+      lastAppliedVersion: '2',
+    );
+    expect(skipped, isNull);
+    expect(await plugin.currentIcon(), 'default');
+
+    final applied = await plugin.applyActiveIconIfNeeded(
+      config: const RemoteAppIconConfig(
+        activeIcon: 'Red',
+        iconVersion: '3',
+      ),
+      lastAppliedIcon: 'default',
+      lastAppliedVersion: '1',
+    );
+    expect(applied, 'Red');
+    expect(await plugin.currentIcon(), 'Red');
   });
 }
